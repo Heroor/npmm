@@ -8,18 +8,17 @@ const args = process.argv.slice(2)
 
 export default async function n() {
   const manager = await getManager()
-  const command = `${manager} ${args}`
+  const command = `${manager} ${args.join(' ')}`
   console.log(command)
   spawn(command, { shell: true, stdio: 'inherit', cwd })
 }
 
-async function getManager() {
-  let pkgManager = 'npm'
+async function getManager(dfManager = 'npm') {
   for await (const [manager, lockFile] of lockFileMap) {
     try {
       await fs.access(path.resolve(cwd, lockFile))
       return manager
     } catch (_) {}
   }
-  return pkgManager
+  return dfManager
 }

@@ -1,2 +1,5 @@
 #!/usr/bin/env node
-require('../dist/index.js').default()
+
+import main from '../dist/index.mjs'
+
+main()

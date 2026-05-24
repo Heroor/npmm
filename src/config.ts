@@ -1,5 +1,7 @@
+export type ManagerName = 'npm' | 'pnpm' | 'yarn'
+
 export type Manager = {
-  name: string
+  name: ManagerName
   lockFile: string
 }
 
@@ -16,7 +18,3 @@ const yarn: Manager = {
   lockFile: 'yarn.lock',
 }
 export const managers = [npm, pnpm, yarn]
-
-export const lockFileMap = new Map(
-  managers.map(({ name, lockFile }) => [name, lockFile])
-)

@@ -2,7 +2,7 @@
 
 import main from '../dist/index.mjs'
 
-main().catch((error) => {
+main().catch(error => {
   console.error(error instanceof Error ? error.message : error)
   process.exitCode = 1
 })

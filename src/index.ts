@@ -9,7 +9,7 @@ const args = process.argv.slice(2)
 
 type LockFileMatch = {
   manager: ManagerName
-  lockFile: string
+  lockFiles: string[]
 }
 
 type ProjectInfo = {
@@ -24,7 +24,9 @@ export default async function n() {
   await spawnManager(manager)
 }
 
-async function getManager(dfManager: ManagerName = 'npm'): Promise<ManagerName> {
+async function getManager(
+  dfManager: ManagerName = 'npm',
+): Promise<ManagerName> {
   const project = await findNearestProject(cwd)
 
   if (!project) {
@@ -42,10 +44,12 @@ async function getManager(dfManager: ManagerName = 'npm'): Promise<ManagerName> 
   return selectManager(project)
 }
 
-async function findNearestProject(startDir: string): Promise<ProjectInfo | undefined> {
+async function findNearestProject(
+  startDir: string,
+): Promise<ProjectInfo | undefined> {
   let dir = startDir
 
-  // 从当前目录向上寻找最近的包管理器信号，兼容在 monorepo 子目录里执行 n 的场景。
+  // Find the nearest package.json or lock file by traversing up the directory tree.
   while (true) {
     const packageManager = await readPackageManager(dir)
     const lockFiles = await readLockFiles(dir)
@@ -67,9 +71,13 @@ async function findNearestProject(startDir: string): Promise<ProjectInfo | undef
   }
 }
 
-async function readPackageManager(dir: string): Promise<ManagerName | undefined> {
+async function readPackageManager(
+  dir: string,
+): Promise<ManagerName | undefined> {
   try {
-    const packageJson = JSON.parse(await readFile(resolve(dir, 'package.json'), 'utf8'))
+    const packageJson = JSON.parse(
+      await readFile(resolve(dir, 'package.json'), 'utf8'),
+    )
     const packageManager = packageJson.packageManager
 
     if (typeof packageManager !== 'string') {
@@ -82,7 +90,9 @@ async function readPackageManager(dir: string): Promise<ManagerName | undefined>
     }
 
     throw new Error(
-      `npmm: packageManager "${packageManager}" is not supported. Supported managers: npm, pnpm, yarn.`
+      `npmm: packageManager "${packageManager}" is not supported. Supported managers: ${managers
+        .map(manager => manager.name)
+        .join(', ')}.`,
     )
   } catch (error) {
     if (isNotFoundError(error)) {
@@ -97,16 +107,25 @@ async function readLockFiles(dir: string): Promise<LockFileMatch[]> {
   const matches: LockFileMatch[] = []
 
   for (const manager of managers) {
-    try {
-      await access(resolve(dir, manager.lockFile))
+    const lockFiles: string[] = []
+
+    // Some managers have historical lockfile names; treat them as one manager signal.
+    for (const lockFile of manager.lockFiles) {
+      try {
+        await access(resolve(dir, lockFile))
+        lockFiles.push(lockFile)
+      } catch (error) {
+        if (!isNotFoundError(error)) {
+          throw error
+        }
+      }
+    }
+
+    if (lockFiles.length > 0) {
       matches.push({
         manager: manager.name,
-        lockFile: manager.lockFile,
+        lockFiles,
       })
-    } catch (error) {
-      if (!isNotFoundError(error)) {
-        throw error
-      }
     }
   }
 
@@ -116,17 +135,18 @@ async function readLockFiles(dir: string): Promise<LockFileMatch[]> {
 async function selectManager(project: ProjectInfo): Promise<ManagerName> {
   if (!process.stdin.isTTY) {
     throw new Error(
-      `npmm: multiple lockfiles found in ${project.dir}. Set packageManager in package.json for non-interactive usage.`
+      `npmm: multiple lockfiles found in ${project.dir}. Set packageManager in package.json for non-interactive usage.`,
     )
   }
 
-  // 选择只影响本次执行，不写入 package.json，保持 npmm 作为透明 alias 的职责边界。
+  // Only prompt the user to select a package manager
+  // when multiple lock files are found and no packageManager field is set in package.json.
   const selected = await select({
     message: `Multiple lockfiles found in ${project.dir}. Select a package manager:`,
-    options: project.lockFiles.map(({ manager, lockFile }) => ({
+    options: project.lockFiles.map(({ manager, lockFiles }) => ({
       value: manager,
       label: manager,
-      hint: lockFile,
+      hint: lockFiles.join(', '),
     })),
   })
 
@@ -142,7 +162,7 @@ function spawnManager(manager: ManagerName): Promise<void> {
     let settled = false
     const child = spawn(manager, args, { stdio: 'inherit', cwd })
 
-    child.on('error', (error) => {
+    child.on('error', error => {
       if (settled) {
         return
       }
@@ -156,13 +176,13 @@ function spawnManager(manager: ManagerName): Promise<void> {
       rejectChild(error)
     })
 
-    child.on('exit', (code) => {
+    child.on('exit', code => {
       if (settled) {
         return
       }
       settled = true
 
-      // 子进程已经负责输出失败原因；npmm 只透传退出码，避免重复报错。
+      // The child process has already exited, so we can safely set the exit code and resolve.
       process.exitCode = code ?? 1
       resolveChild()
     })
@@ -170,9 +190,11 @@ function spawnManager(manager: ManagerName): Promise<void> {
 }
 
 function isManagerName(value: string): value is ManagerName {
-  return managers.some((manager) => manager.name === value)
+  return managers.some(manager => manager.name === value)
 }
 
 function isNotFoundError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error && (error as NodeJS.ErrnoException).code === 'ENOENT'
+  return (
+    error instanceof Error && (error as NodeJS.ErrnoException).code === 'ENOENT'
+  )
 }

@@ -1,20 +1,24 @@
-export type ManagerName = 'npm' | 'pnpm' | 'yarn'
+export type ManagerName = 'npm' | 'pnpm' | 'yarn' | 'bun'
 
 export type Manager = {
   name: ManagerName
-  lockFile: string
+  lockFiles: string[]
 }
 
 const npm: Manager = {
   name: 'npm',
-  lockFile: 'package-lock.json',
+  lockFiles: ['package-lock.json'],
 }
 const pnpm: Manager = {
   name: 'pnpm',
-  lockFile: 'pnpm-lock.yaml',
+  lockFiles: ['pnpm-lock.yaml'],
 }
 const yarn: Manager = {
   name: 'yarn',
-  lockFile: 'yarn.lock',
+  lockFiles: ['yarn.lock'],
 }
-export const managers = [npm, pnpm, yarn]
+const bun: Manager = {
+  name: 'bun',
+  lockFiles: ['bun.lock', 'bun.lockb'],
+}
+export const managers = [npm, pnpm, yarn, bun]
